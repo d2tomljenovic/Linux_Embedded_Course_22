@@ -3,7 +3,7 @@
 #include <linux/i2c.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
-#include "device_module.h"
+#include <linux/string.h>
 #include "morse_code.h"
 
 #define FIRST_MINOR 0
@@ -18,6 +18,10 @@ static char coded[255];
 
 static struct cdev cDevice;
 static dev_t deviceNum;
+
+ssize_t device_read(struct file *filePtr, char __user *userPtr, size_t size, loff_t *offPtr);
+ssize_t device_write(struct file *filePtr, const char __user *userPtr, size_t size, loff_t *offPtr);
+void code_into_morse(void);
 
 static struct file_operations fOps = 
 {
@@ -123,16 +127,7 @@ void code_into_morse()
 			index = *inputPtr - ascii_offset;
 			
 			morseArrayPtr = &morseCodes[index];
-			morseSignPtr = *morseArrayPtr;
-			
-			while(*morseSignPtr != '\0')
-			{
-				outputPtr[output_index] = *morseSignPtr;
-				
-				output_index++;
-				morseSignPtr++;
-			}
-						
+			strcpy(outputPtr, *morseArrayPtr);
 		}
 		
 		//TODO: /* Special check for spaces and digits*/
