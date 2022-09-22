@@ -3,15 +3,33 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 
 char getch(void);
-char *niz;
+
 
 static sem_t semCommandChange;
 static sem_t semFinishSignal;
 
 static pthread_mutex_t bufferAccess;
+
+typedef struct
+{
+  char *niz;
+  int cnt;
+}CommandData;
+
+CommandData commDataWrite;
+CommandData commDataRead;
+
+typedef struct
+{
+  int id;
+  int data;
+}Command;
+
+Command com;
 
 int printRandoms(int lower, int upper, int count)
 {
@@ -24,6 +42,7 @@ void NormalRandoms()
 {
     int lenght = printRandoms(1, 50, 1);
     int k;
+    char *niz;
     niz = (char*)calloc(lenght+1, sizeof(char));
     for (int i = 0; i<lenght; i++){
     	while(1){
@@ -35,17 +54,52 @@ void NormalRandoms()
     	niz [i] = k;
     }
     niz[lenght] = '\0';
+    commDataWrite.niz= niz;
+    commDataWrite.cnt= lenght;
     printf("lenght = %d, niz = %s", lenght, niz);
 }
 
+int sz1, sz2;
 
-typedef struct
+void FileHandlerWrite(char *niz, int cnt)
 {
-  int id;
-  int data;
-}Command;
+	int filedevice;
+	filedevice = open("/dev/mydevice", O_WRONLY);
+	if(filedevice == -1)
+	{
+		printf("Error while opening device\n");
+		
+		return -1;
+	}
+	else{
+		sz1 = write(filedevice, niz, cnt);
+	}
+	close(filedevice);
+}
 
-Command com;
+void FileHandlerRead()
+{
+	int filedevice;
+	char *c = (char *) calloc(100, sizeof(char));
+	
+	filedevice = open("/dev/mydevice", O_RDONLY);
+	if(filedevice == -1)
+	{
+		printf("Error while opening device\n");
+		
+		return -1;
+	}
+	else{
+		sz2 = read(filedevice, c, sz1);
+		c[sz2] = '\0';
+	}
+	close(filedevice);
+	
+	commDataRead.niz = c;
+	commDataRead.cnt = sz2+1;
+	printf("Ispis niza iz devicea: %s", c);
+
+}
 
 char test[5][20] =
 {
@@ -57,13 +111,13 @@ char test[5][20] =
  };
  
  //todo u zavisnosti o enkodiranju u char deviceu promjeni char odgovor
- char odgovor[5][20] =
+char odgovor[5][71] =
 {
- "STV ARNO",
- "NEMAM5",
- "IDeJU",
- "12 ZA 34",
- "OV0"
+ "* * *   -   * * -       * -   - * -   - *   - - -",
+ "- *   *   - -   * -   - -   * * * * *",
+ "* *   - * *   *   * - - -   -",
+ "* - - - -   * * - - -       - - * *   * -       * * * - -   * * * * -",
+ "- - -   * * -   - - - - -"
  };
 
 int compareString(char *test, char *odgovor)
@@ -106,8 +160,8 @@ void* th1 (void *param)
             break;
         }
 
-    	printText();
-        c = getch();
+    	//printText();
+        c = getchar();
 	if( c < '0' || c > '5')
 	{
 		printf("Neispravan unos.");
@@ -124,7 +178,7 @@ void* th1 (void *param)
 	case '2':
 		com.id = c - 48;
 		printText1();
-		c = getch();
+		c = getchar();
 		if( c < '0' || c > '5')
 		{
 			printf("Neispravan unos.");
@@ -177,21 +231,36 @@ void* th2 (void *param)
         {
         case 1:
            NormalRandoms();
-           sleep(1);
+           FileHandlerWrite(commDataWrite.niz, commDataWrite.cnt);
+           FileHandlerRead();
+           sleep(10);
         break;
         case 2:
-           printf("\n %d com2 %s \n",commid,test[data]);
-           if(compareString(test[data], odgovor[data])){
+           FileHandlerWrite(test[data], strlen(test[data]));
+           FileHandlerRead();
+           //printf("\n %d com2 %s \n",commid,test[data]);
+           if(compareString(test[data], commDataRead.niz)){
            	printf("Isti su");
            	}
            	else{
            	printf("Nisu isti");
            	}
            sleep(1);
+           state = 4;
         break;
         case 3:
-           printf("\n %d com3 %s \n",commid,test[data]);
+           test[data][2] = 'a';
+           FileHandlerWrite(test[data], strlen(test[data]));
+           FileHandlerRead();
+           //printf("\n %d com2 %s \n",commid,test[data]);
+           if(compareString(test[data], commDataRead.niz)){
+           	printf("Isti su");
+           	}
+           	else{
+           	printf("Nisu isti");
+           	}
            sleep(1);
+           state = 4;
         break;
         case 4:
            sem_wait(&semCommandChange);
