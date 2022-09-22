@@ -11,17 +11,17 @@
 #define DEVICE_COUNT 1
 #define DEVICE_NAME "code_device"
 #define DATA_MAX 50
+#define ASCII_OFFSET  0x41
 
 
 static char buffer[DATA_MAX] = "";
-static char coded[255];
 
 static struct cdev cDevice;
 static dev_t deviceNum;
 
 ssize_t device_read(struct file *filePtr, char __user *userPtr, size_t size, loff_t *offPtr);
 ssize_t device_write(struct file *filePtr, const char __user *userPtr, size_t size, loff_t *offPtr);
-void code_into_morse(void);
+void code_into_morse(char* outBuf);
 
 static struct file_operations fOps = 
 {
@@ -32,6 +32,7 @@ static struct file_operations fOps =
 
 ssize_t device_read(struct file *filePtr, char __user *userPtr, size_t size, loff_t *offPtr)
 {
+	char* coded;
 	int not_copied;
 	
 	printk(KERN_INFO "Read function called\n");
@@ -42,13 +43,14 @@ ssize_t device_read(struct file *filePtr, char __user *userPtr, size_t size, lof
 		printk(KERN_INFO "Maximum data that can be received is %d, rest is dropped\n", DATA_MAX);
 		size = DATA_MAX;
 	}
+
+	coded = (char *)kmalloc(size, GFP_KERNEL );
+	memset(coded , '\0', size);
+
+	code_into_morse(coded);	
+	not_copied = copy_to_user(userPtr, coded, size); /* Check params */
 	
-	not_copied = copy_to_user(userPtr, &buffer[0], size); /* Check params */
-	
-	printk("Not copied value: %d\n", not_copied);
-	code_into_morse();
-	/* Read function should return 0 -> if it returns number greater than zero user space will assume that not all data is read and will call read again */
-	return 15;
+	return (size - not_copied);
 }
 
 ssize_t device_write(struct file *filePtr, const char __user *userPtr, size_t size, loff_t *offPtr)
@@ -57,7 +59,7 @@ ssize_t device_write(struct file *filePtr, const char __user *userPtr, size_t si
 	
 	printk(KERN_INFO "Write function called\n");
 	
-	buffer[0] = '\0';
+	memset(buffer, '\0', DATA_MAX);
 	
 	if(size > DATA_MAX)
 	{
@@ -106,15 +108,11 @@ static int __init ModuleInit(void)
 }
 
 
-void code_into_morse()
+void code_into_morse(char* outBuf)
 {
 	char **morseArrayPtr = &morseCodes[0];
 	char *inputPtr = &buffer[0];
-	char *outputPtr = &coded[0];
-	char *morseSignPtr;
 	int index = 0;
-	int output_index = 0;
-	int ascii_offset = 0x41; 
 	
 	printk("Morse coding func called\n");
 	
@@ -124,10 +122,12 @@ void code_into_morse()
 		/* Searching for letters in input array */ /* Handle tolower -> ascii calculations */
 		if(*inputPtr >= 'A' && *inputPtr <= 'Z')
 		{
-			index = *inputPtr - ascii_offset;
+			index = *inputPtr - ASCII_OFFSET;
 			
 			morseArrayPtr = &morseCodes[index];
-			strcpy(outputPtr, *morseArrayPtr);
+			
+			strcat(outBuf, *morseArrayPtr);
+			outBuf += sizeof(morseCodes[index]);
 		}
 		
 		//TODO: /* Special check for spaces and digits*/
@@ -137,6 +137,7 @@ void code_into_morse()
 		
 		}
 		*/
+		printk("Coded message is: %s", outBuf);
 		inputPtr++;
 	}
 	
