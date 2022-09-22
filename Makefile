@@ -15,6 +15,3 @@ modules:
 
 clean:
 	$(MAKE) -C $(KERNEL_SOURCES) M=$$PWD $@
-
-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y
-git remote set-url origin https://d2tomljenovic@github.com/d2tomljenovic/Linux_Embedded_Course_22.git
