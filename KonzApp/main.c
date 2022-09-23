@@ -5,9 +5,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-
 char getch(void);
-
+int sz1, sz2;
 
 static sem_t semCommandChange;
 static sem_t semFinishSignal;
@@ -56,10 +55,8 @@ void NormalRandoms()
     niz[lenght] = '\0';
     commDataWrite.niz= niz;
     commDataWrite.cnt= lenght;
-    printf("lenght = %d, niz = %s", lenght, niz);
+    printf("<<<<Random niz za upis= %s, dužina random niza: %d.\n", niz, lenght);
 }
-
-int sz1, sz2;
 
 void FileHandlerWrite(char *niz, int cnt)
 {
@@ -97,7 +94,7 @@ void FileHandlerRead()
 	
 	commDataRead.niz = c;
 	commDataRead.cnt = sz2+1;
-	printf("Ispis niza iz devicea: %s", c);
+	printf(">>>>Ispis niza iz devicea: %s\n", c);
 
 }
 
@@ -144,7 +141,7 @@ void printText1()
 {
 	for(int i=0;i < 5;i++)
 	{
-	printf("Niz%d %s \n", i, test[i]);
+	printf("Niz %d %s \n", i+1, test[i]);
 	}
 }
 
@@ -160,11 +157,11 @@ void* th1 (void *param)
             break;
         }
 
-    	//printText();
-        c = getchar();
+    	printText();
+        c = getch();
 	if( c < '0' || c > '5')
 	{
-		printf("Neispravan unos.");
+		printf("Neispravan unos.\n");
 		continue;
 	}
 	
@@ -178,14 +175,14 @@ void* th1 (void *param)
 	case '2':
 		com.id = c - 48;
 		printText1();
-		c = getchar();
+		c = getch();
 		if( c < '0' || c > '5')
 		{
-			printf("Neispravan unos.");
+			printf("Neispravan unos.\n");
 			break;
 		}
 		com.data = c - 48 -1;
-		printf("Izabaran %d.",(com.data + 1));
+		printf("Izabaran %d.\n",(com.data + 1));
 		sem_post(&semCommandChange);
 		break;
 	case '4':
@@ -231,7 +228,9 @@ void* th2 (void *param)
         {
         case 1:
            NormalRandoms();
+           sleep(2);
            FileHandlerWrite(commDataWrite.niz, commDataWrite.cnt);
+           sleep(2);
            FileHandlerRead();
            sleep(10);
         break;
@@ -243,9 +242,9 @@ void* th2 (void *param)
            	printf("Isti su");
            	}
            	else{
-           	printf("Nisu isti");
+           	printf("Upisani testni niz i odgovor nisu isti.\n");
            	}
-           sleep(1);
+           sleep(3);
            state = 4;
         break;
         case 3:
@@ -254,10 +253,10 @@ void* th2 (void *param)
            FileHandlerRead();
            //printf("\n %d com2 %s \n",commid,test[data]);
            if(compareString(test[data], commDataRead.niz)){
-           	printf("Isti su");
+           	printf("Upisani testni niz i odgovor su isti.\n");
            	}
            	else{
-           	printf("Nisu isti");
+           	printf("Upisani testni niz i odgovor nisu isti.\n");
            	}
            sleep(1);
            state = 4;
