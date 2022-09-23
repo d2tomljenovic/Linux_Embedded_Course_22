@@ -12,19 +12,26 @@
 #define DEVICE_COUNT 1
 #define DEVICE_NAME "code_device"
 #define DATA_MAX 50
+#define DATA_OUTPUT_MAX 501
 
 
 
+int driver_open(struct inode *device_file, struct file *instance);
+int driver_close(struct inode *device_file, struct file *instance);
 ssize_t device_read(struct file *filePtr, char __user *userPtr, size_t size, loff_t *offPtr);
 ssize_t device_write(struct file *filePtr, const char __user *userPtr, size_t size, loff_t *offPtr);
 void code_into_morse(void);
 void output_to_led(void);
 
-int unitLength;
+int unitLength = 100;
+int ledUsed = 0; /* 0 for RED, 1 for GREEN*/
 module_param(unitLength, int, S_IWUSR|S_IRUSR);
+module_param(ledUsed, int, S_IWUSR|S_IRUSR);
 
 static char buffer[DATA_MAX] = "";
-static char coded[255];
+static char coded[DATA_OUTPUT_MAX];
+int coded_array_size = 0;
+int LED_ID = GPIO_LED_RED;
 
 static struct cdev cDevice;
 static dev_t deviceNum;
@@ -32,29 +39,58 @@ static dev_t deviceNum;
 static struct file_operations fOps = 
 {
 	.owner = THIS_MODULE,
+	.open=driver_open,
+	.release=driver_close,
 	.read = device_read,
 	.write = device_write
 };
 
 
+int driver_open(struct inode *device_file, struct file *instance)
+{
+	printk(KERN_INFO "Device opened\n");
+	
+	return 0;
+}
 
+int driver_close(struct inode *device_file, struct file *instance)
+{
+	printk(KERN_INFO "Device closed\n");
+	
+	return 0;
+}
 
 ssize_t device_read(struct file *filePtr, char __user *userPtr, size_t size, loff_t *offPtr)
 {
 	int not_copied;
+	ssize_t ret;
+	char terminator = '\0';
 	
 	printk(KERN_INFO "Read function called\n");
 	
-	if(size > DATA_MAX)
+	/* Size in smaller than coded array */
+	if(size < coded_array_size)
 	{
-		printk(KERN_INFO "Read overflow\n");
-		
-		size = DATA_MAX;
+		printk(KERN_INFO "Partialy read\n");
+		not_copied = copy_to_user(userPtr, &coded[0], size-1);
+	 	not_copied += copy_to_user(userPtr+(size-1), &terminator, 1);
+	 	*offPtr += size;
+	 	ret = size;
+	}
+	else 
+	{
+		/* Size is greater than maximal coded array */
+		if(size > DATA_OUTPUT_MAX)
+		{
+			size = DATA_OUTPUT_MAX;
+			printk(KERN_INFO "Read overflow\n");
+		}
+	
+		not_copied = copy_to_user(userPtr, &coded[0], coded_array_size); 
+		ret = coded_array_size;
 	}
 	
-	not_copied = copy_to_user(userPtr, &buffer[0], size); 
-			
-	return (size - not_copied);
+	return ret;
 }
 
 ssize_t device_write(struct file *filePtr, const char __user *userPtr, size_t size, loff_t *offPtr)
@@ -66,7 +102,7 @@ ssize_t device_write(struct file *filePtr, const char __user *userPtr, size_t si
 	
 	if(size > DATA_MAX)
 	{
-		printk(KERN_INFO "Read overflow\n");
+		printk(KERN_INFO "Write overflow\n");
 		
 		size = DATA_MAX;
 	}
@@ -123,10 +159,22 @@ static int __init ModuleInit(void)
 		return retVal;
 	}
 	
+	if(ledUsed == 0)
+	{
+		LED_ID = GPIO_LED_RED;
+	}
+	else if(ledUsed == 1)
+	{
+		LED_ID = GPIO_LED_GREEN;
+	}
+	else
+	{
+		/* Do nothing, only 0 and 1 are valid options */
+	}
 
 	gpio_led_init();
-	gpio_led_set(3);
-	gpio_led_clear(3);
+	gpio_led_set(LED_ID);
+	gpio_led_clear(LED_ID);
 	
 	return 0;
 }
@@ -200,11 +248,10 @@ void code_into_morse()
 			outputPtr[output_index] = 'x';
 			output_index++;
 		}
-		else if (*inputPtr >= ' ')
+		else if ((*inputPtr == ' ') && (outputPtr[output_index - 1] == 'x'))
 		{
 			/* X simbols spaces between letters */
-			outputPtr[output_index] = 'X';
-			output_index++;
+			outputPtr[output_index -1] = 'X';
 		}
 		else
 		{
@@ -215,6 +262,8 @@ void code_into_morse()
 	}
 	
 	outputPtr[output_index] = '\0';
+	
+	coded_array_size = output_index;
 }
 
 void output_to_led()
@@ -226,19 +275,19 @@ void output_to_led()
 		switch(*ptr)
 		{
 			case '*':
-				gpio_led_blink(3, unitLength, 0);
+				gpio_led_blink(LED_ID, unitLength, 0);
 				break;
 			case '-':
-				gpio_led_blink(3, 3*unitLength, 0);
+				gpio_led_blink(LED_ID, 3*unitLength, 0);
 				break;
 			case ' ':
-				gpio_led_blink(3, 0, unitLength);
+				gpio_led_blink(LED_ID, 0, unitLength);
 				break;
 			case 'x':
-				gpio_led_blink(3, 0, 3*unitLength);
+				gpio_led_blink(LED_ID, 0, 3*unitLength);
 				break;
 			case 'X':
-				gpio_led_blink(3, 0, 7*unitLength);
+				gpio_led_blink(LED_ID, 0, 7*unitLength);
 				break;
 		}
 		

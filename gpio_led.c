@@ -62,9 +62,13 @@ int gpio_led_blink(int led, unsigned int hold_high, unsigned int hold_low)
             return -1;
        }
        
-   /* Set the led and hold it high */
-   gpio_led_set(led);
-   msleep(hold_high);
+    /* Set the led and hold it high */
+    if(hold_high > 0)
+      {
+           gpio_led_set(led);
+   	       msleep(hold_high);
+      }  
+
    
    /* Clear the led and hold it low */
    gpio_led_clear(led);
