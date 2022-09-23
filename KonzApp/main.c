@@ -7,6 +7,8 @@
 
 char getch(void);
 int sz1, sz2;
+int flag = 0;
+int flag2 = 0;
 
 static sem_t semCommandChange;
 static sem_t semFinishSignal;
@@ -18,7 +20,7 @@ typedef struct
   int cnt;
   char *path;
   char *modRada;
-  char *izabirTestnogNiza;
+  char *izborTestnogNiza;
 }Argumenti;
 
 Argumenti ulazniArgumenti;
@@ -66,7 +68,6 @@ void NormalRandoms()
     commDataWrite.niz= niz;
     commDataWrite.cnt= lenght;
     printf("<<<<Random niz za upis= %s, dužina random niza: %d.\n", niz, lenght);
-    //printf("ulazniArgumenti.modRada : %s", ulazniArgumenti.modRada);
 }
 
 void FileHandlerWrite(char *niz, int cnt)
@@ -166,7 +167,8 @@ void printText1()
 /* Thread 1*/
 void* th1 (void *param)
 {
-    char c;
+    char c1;
+    char c2;
 
     while (1)
     {
@@ -176,21 +178,21 @@ void* th1 (void *param)
         }
 
     	printText();
-        c = getch();
-        /**if (ulazniArgumenti.cnt > 2){
-        	strcpy(c, ulazniArgumenti.modRada);
-       		printf("ulazniArgumenti.modRada : %s, %d", ulazniArgumenti.modRada, c);
+        //c = getch();
+        if (ulazniArgumenti.cnt > 2 && flag == 0){
+        	c1 = *ulazniArgumenti.modRada;
+       		flag = 1;
         	}
         else{
-        	c = getch();
-        }**/
-	if( c < '0' || c > '5')
+        	c1 = getch();
+        }
+	if( c1 < '0' || c1 > '5')
 	{
 		printf("Neispravan unos c-a.\n");
 		continue;
 	}
 	
-	switch(c)
+	switch(c1)
 	{
 	case '1':
 		com.id = 1;
@@ -198,15 +200,22 @@ void* th1 (void *param)
 	break;
 	case '3':
 	case '2':
-		com.id = c - 48;
+		com.id = c1 - 48;
 		printText1();
-		c = getch();
-		if( c < '0' || c > '5')
+		//c = getch();
+		if (ulazniArgumenti.cnt > 2 && flag2 == 0){
+        		c2 = *ulazniArgumenti.izborTestnogNiza;
+       			flag2 = 1;
+        	}
+        	else{
+        		c2 = getch();
+        	}
+		if( c2 < '0' || c2 > '5')
 		{
 			printf("Neispravan unos.\n");
 			break;
 		}
-		com.data = c - 48 -1;
+		com.data = c2 - 48 -1;
 		printf("Izabaran %d.\n",(com.data + 1));
 		sem_post(&semCommandChange);
 		break;
@@ -252,11 +261,10 @@ void* th2 (void *param)
         {
         case 1:
            NormalRandoms();
-           sleep(2);
            FileHandlerWrite(commDataWrite.niz, commDataWrite.cnt);
-           sleep(2);
            FileHandlerRead();
-           sleep(10);
+           sleep(5);
+	   flag = 0;
         break;
         case 2:
            FileHandlerWrite(test[data], strlen(test[data]));
@@ -270,6 +278,7 @@ void* th2 (void *param)
            	}
            sleep(3);
            state = 4;
+           flag2 = 0;
         break;
         case 3:
            test[data][2] = 'a';
@@ -311,10 +320,8 @@ int main (int argc, char *argv[])
     ulazniArgumenti.cnt = argc;
     ulazniArgumenti.path = argv[1];
     ulazniArgumenti.modRada = argv[2];
-    ulazniArgumenti.izabirTestnogNiza = argv[3];
+    ulazniArgumenti.izborTestnogNiza = argv[3];
     
-    printf("argc = %d, argv[0] = %s, ulazniArgumenti.argv[1]= %s, [2]: %s, [3]: %s", argc, argv[0], ulazniArgumenti.path, ulazniArgumenti.modRada, ulazniArgumenti.izabirTestnogNiza);
-
     /* Thread IDs. */
     pthread_t hTh1;
     pthread_t hTh2;
