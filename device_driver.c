@@ -14,20 +14,26 @@
 #define DATA_MAX 50
 #define DATA_OUTPUT_MAX 501
 
+/* IOCTL commands */
+#define SET_LED _IOW(235,'0',int*)
+#define SET_UNIT _IOW(235,'1',int*)
 
-
+/* Function prototypes */
 int driver_open(struct inode *device_file, struct file *instance);
 int driver_close(struct inode *device_file, struct file *instance);
 ssize_t device_read(struct file *filePtr, char __user *userPtr, size_t size, loff_t *offPtr);
 ssize_t device_write(struct file *filePtr, const char __user *userPtr, size_t size, loff_t *offPtr);
+long device_unlocked_ioctl 	(struct file *filePtr, unsigned int cmd, unsigned long arg);
 void code_into_morse(void);
 void output_to_led(void);
 
+/* Module params */
 int unitLength = 100;
 int ledUsed = 0; /* 0 for RED, 1 for GREEN*/
 module_param(unitLength, int, S_IWUSR|S_IRUSR);
 module_param(ledUsed, int, S_IWUSR|S_IRUSR);
 
+/* Global variables */
 static char buffer[DATA_MAX] = "";
 static char coded[DATA_OUTPUT_MAX];
 int coded_array_size = 0;
@@ -36,15 +42,59 @@ int LED_ID = GPIO_LED_RED;
 static struct cdev cDevice;
 static dev_t deviceNum;
 
+static struct class *dev_class;
+
 static struct file_operations fOps = 
 {
 	.owner = THIS_MODULE,
 	.open=driver_open,
 	.release=driver_close,
 	.read = device_read,
-	.write = device_write
+	.write = device_write,
+	.unlocked_ioctl = device_unlocked_ioctl
 };
 
+long device_unlocked_ioctl (struct file *f, unsigned int cmd, unsigned long arg)
+{
+    int value;
+    int ret;
+    
+	pr_info("unlocked_ioctl triggered\n");
+    
+    /* Copy new value from user */
+    ret = copy_from_user(&value, (int*)arg, sizeof(value));
+	switch(cmd) {
+        case SET_LED:
+            /* Only 0 and 1 allowed */
+            if((value != 0) && (value != 1))
+            {
+                return -EINVAL;
+            }
+            
+            /* Set new LED */
+            LED_ID = (value == 0) ? GPIO_LED_RED : GPIO_LED_GREEN;
+            
+            break;
+        case SET_UNIT:
+            /* Only positive numbers allowed */
+            if(value < 0)
+            {
+                return -EINVAL;
+            }
+            
+            /* Set new unit value */
+            unitLength = value;
+
+            break;
+            
+        default:
+            /* Unsupported cmd */
+            pr_info("Command not supported\n");
+            return -EINVAL;
+            break;
+	}
+	return 0;
+}
 
 int driver_open(struct inode *device_file, struct file *instance)
 {
@@ -132,33 +182,49 @@ ssize_t device_write(struct file *filePtr, const char __user *userPtr, size_t si
 	
 	/* Debug code end */
 	
-	
 	return (size - not_copied);
 }
 
 static int __init ModuleInit(void)
 {
-	int retVal = 0;
+	int err;
 	
 	printk(KERN_INFO "Module initialized.\n");
 		
-	retVal = alloc_chrdev_region(&deviceNum, FIRST_MINOR, DEVICE_COUNT, DEVICE_NAME);
-		
+	/* Register Char Dev Region */
+	if(alloc_chrdev_region(&deviceNum, FIRST_MINOR, DEVICE_COUNT, DEVICE_NAME))
+	{
+	    printk(KERN_INFO "Registering char device to system failed\n");
+	    err=-ENODEV;
+		goto err_exit;
+	}
 	printk(KERN_INFO "Major number for char device allocated -> %d.\n", MAJOR(deviceNum));
 	
+	/* Alloc Char Dev */
 	cdev_init(&cDevice, &fOps);
-	
-	retVal = cdev_add(&cDevice, deviceNum, MINOR_COUNT);
-	
-	if(retVal < 0)
+		
+	/* Add Char Dev */
+	if(cdev_add(&cDevice, deviceNum, MINOR_COUNT))
 	{
 		printk(KERN_INFO "Adding char device to system failed\n");
-		cdev_del(&cDevice);
-		unregister_chrdev_region(deviceNum, DEVICE_COUNT);
-		
-		return retVal;
+    	err=-ENODEV;
+		goto err_unregister_dev;
 	}
 	
+	/* Create device class */
+    if((dev_class = class_create(THIS_MODULE,"morse_class")) == NULL){
+        pr_err("Cannot create the struct class for device\n");
+        goto err_destroy_char_driver;
+    }
+	
+	/* Create device */
+    if((device_create(dev_class, NULL, deviceNum, NULL, "morse_device")) == NULL){
+            pr_err("Cannot create the Device\n");
+            goto err_destroy_class;
+    }
+    printk(KERN_INFO "Char device created under /dev/morse_device [%d, %d]\n", MAJOR(deviceNum), MINOR(deviceNum));
+		
+	/* Parse */
 	if(ledUsed == 0)
 	{
 		LED_ID = GPIO_LED_RED;
@@ -169,14 +235,26 @@ static int __init ModuleInit(void)
 	}
 	else
 	{
-		/* Do nothing, only 0 and 1 are valid options */
+		/* Only 0 and 1 are valid options, defaulting to RED */
 	}
 
-	gpio_led_init();
-	gpio_led_set(LED_ID);
+    /* Init GPIO */
+    gpio_led_init();
 	gpio_led_clear(LED_ID);
-	
-	return 0;
+
+    return 0;
+
+    err_destroy_class:
+        class_destroy(dev_class);
+    
+    err_destroy_char_driver:
+        cdev_del(&cDevice);
+        
+	err_unregister_dev:
+	    unregister_chrdev_region(deviceNum, DEVICE_COUNT);
+		
+	err_exit:
+	    return err;
 }
 
 /* This function just changes character to uppercase if char is in rage a-z */
@@ -269,7 +347,7 @@ void code_into_morse()
 void output_to_led()
 {
 	char *ptr = &coded[0];
-	
+		
 	while(*ptr != '\0')
 	{
 		switch(*ptr)
@@ -292,16 +370,18 @@ void output_to_led()
 		}
 		
 		ptr++;
-	}
-	
+	}	
 }
 
 
 static void __exit ModuleExit(void)
-{
-
+{	
+	device_destroy(dev_class,deviceNum);
+	class_destroy(dev_class);
+	
 	cdev_del(&cDevice);
 	unregister_chrdev_region(deviceNum, DEVICE_COUNT);
+	
 	printk(KERN_INFO "Module removed.\n");
 }
 
