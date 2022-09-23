@@ -15,6 +15,16 @@ static pthread_mutex_t bufferAccess;
 
 typedef struct
 {
+  int cnt;
+  char *path;
+  char *modRada;
+  char *izabirTestnogNiza;
+}Argumenti;
+
+Argumenti ulazniArgumenti;
+
+typedef struct
+{
   char *niz;
   int cnt;
 }CommandData;
@@ -56,15 +66,21 @@ void NormalRandoms()
     commDataWrite.niz= niz;
     commDataWrite.cnt= lenght;
     printf("<<<<Random niz za upis= %s, dužina random niza: %d.\n", niz, lenght);
+    //printf("ulazniArgumenti.modRada : %s", ulazniArgumenti.modRada);
 }
 
 void FileHandlerWrite(char *niz, int cnt)
 {
 	int filedevice;
-	filedevice = open("/dev/mydevice", O_WRONLY);
+	if(ulazniArgumenti.cnt > 1){
+		filedevice = open(ulazniArgumenti.path, O_WRONLY);
+	}
+	else{
+		filedevice = open("/dev/mydevice", O_WRONLY);
+	}
 	if(filedevice == -1)
 	{
-		printf("Error while opening device\n");
+		printf("Error while opening device for writting\n");
 		
 		return -1;
 	}
@@ -78,11 +94,15 @@ void FileHandlerRead()
 {
 	int filedevice;
 	char *c = (char *) calloc(100, sizeof(char));
-	
-	filedevice = open("/dev/mydevice", O_RDONLY);
+	if(ulazniArgumenti.cnt >1){
+		filedevice = open(ulazniArgumenti.path, O_RDONLY);
+	}
+	else{
+		filedevice = open("/dev/mydevice", O_RDONLY);
+	}
 	if(filedevice == -1)
 	{
-		printf("Error while opening device\n");
+		printf("Error while opening device for reading\n");
 		
 		return -1;
 	}
@@ -91,11 +111,9 @@ void FileHandlerRead()
 		c[sz2] = '\0';
 	}
 	close(filedevice);
-	
 	commDataRead.niz = c;
 	commDataRead.cnt = sz2+1;
 	printf(">>>>Ispis niza iz devicea: %s\n", c);
-
 }
 
 char test[5][20] =
@@ -159,9 +177,16 @@ void* th1 (void *param)
 
     	printText();
         c = getch();
+        /**if (ulazniArgumenti.cnt > 2){
+        	strcpy(c, ulazniArgumenti.modRada);
+       		printf("ulazniArgumenti.modRada : %s, %d", ulazniArgumenti.modRada, c);
+        	}
+        else{
+        	c = getch();
+        }**/
 	if( c < '0' || c > '5')
 	{
-		printf("Neispravan unos.\n");
+		printf("Neispravan unos c-a.\n");
 		continue;
 	}
 	
@@ -206,7 +231,6 @@ void* th1 (void *param)
 /* Thread 2 */
 void* th2 (void *param)
 {
-    char c;
     int state = 0;
     int data = 0;
     int commid = 1;
@@ -239,7 +263,7 @@ void* th2 (void *param)
            FileHandlerRead();
            //printf("\n %d com2 %s \n",commid,test[data]);
            if(compareString(test[data], commDataRead.niz)){
-           	printf("Isti su");
+           	printf("Upisani testni niz i odgovor su isti.\n");
            	}
            	else{
            	printf("Upisani testni niz i odgovor nisu isti.\n");
@@ -281,8 +305,15 @@ void* th2 (void *param)
     return 0;
 }
 
-int main (void)
+int main (int argc, char *argv[])
 {
+    
+    ulazniArgumenti.cnt = argc;
+    ulazniArgumenti.path = argv[1];
+    ulazniArgumenti.modRada = argv[2];
+    ulazniArgumenti.izabirTestnogNiza = argv[3];
+    
+    printf("argc = %d, argv[0] = %s, ulazniArgumenti.argv[1]= %s, [2]: %s, [3]: %s", argc, argv[0], ulazniArgumenti.path, ulazniArgumenti.modRada, ulazniArgumenti.izabirTestnogNiza);
 
     /* Thread IDs. */
     pthread_t hTh1;
