@@ -1,6 +1,5 @@
 #include <linux/init.h>
 #include <linux/module.h>
-#include <linux/i2c.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
 #include <linux/delay.h>
@@ -167,20 +166,6 @@ ssize_t device_write(struct file *filePtr, const char __user *userPtr, size_t si
 	
 	/* LEDS */
 	output_to_led();
-	
-	/* Debug code */
-	
-	char *ptr = &coded[0];
-	
-	while(*ptr != '\0')
-	{
-		printk(KERN_CONT "%c", *ptr);
-		ptr++;
-	}
-		
-	printk(KERN_INFO "Coding done\n");
-	
-	/* Debug code end */
 	
 	return (size - not_copied);
 }
