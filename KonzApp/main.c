@@ -122,7 +122,7 @@ void FileHandlerRead()
 	printf(">>>>Ispis niza iz devicea: %s\n", c);
 }
 
-void FileHandlerIOCTL(int *a)
+void FileHandlerIOCTL_SetLed(int *a)
 {
 	int filedevice;
 	if(ulazniArgumenti.cnt >1){
@@ -139,6 +139,28 @@ void FileHandlerIOCTL(int *a)
 	}
 	else{
 		sz2 = ioctl(filedevice, SET_LED, (int*)a);
+		
+	}
+	close(filedevice);
+}
+
+void FileHandlerIOCTL_SetUnit(int *a)
+{
+	int filedevice;
+	if(ulazniArgumenti.cnt >1){
+		filedevice = open(ulazniArgumenti.path, O_RDONLY);
+	}
+	else{
+		filedevice = open("/dev/morse_device", O_RDONLY);
+	}
+	if(filedevice == -1)
+	{
+		printf("Error while opening device for reading\n");
+		
+		return -1;
+	}
+	else{
+		sz2 = ioctl(filedevice, SET_UNIT, (int*)a);
 		
 	}
 	close(filedevice);
@@ -180,7 +202,7 @@ int compareString(char *test, char *odgovor)
 
 void printText()
 {
-	printf("\nIzaberite komandu:\n1:Normalni rezim rada.\n2:Test rezim rada.\n3:Test rezim rada sa ubacivanjem greske.\n4:Zaustavljanje slanja podataka.\n5:Prekid rada cele aplikacije.\n6:Izbor LED diode.\n");
+	printf("\nIzaberite komandu:\n1:Normalni rezim rada.\n2:Test rezim rada.\n3:Test rezim rada sa ubacivanjem greske.\n4:Zaustavljanje slanja podataka.\n5:Prekid rada cele aplikacije.\n6:Izbor LED diode.\n7:Duljina unit-a.\n");
 }
 
 void printText1()
@@ -202,6 +224,7 @@ void* th1 (void *param)
     char c1;
     char c2;
     int a;
+    char unitStr[20] = {0};
 
     while (1)
     {
@@ -219,7 +242,7 @@ void* th1 (void *param)
         else{
         	c1 = getch();
         }
-	if( c1 < '0' || c1 > '6')
+	if( c1 < '0' || c1 > '7')
 	{
 		printf("Neispravan unos c-a.\n");
 		continue;
@@ -269,9 +292,19 @@ void* th1 (void *param)
            c1 = getch();
            a = (int)(c1)-48;
            printf ("%d\n", a);
-           FileHandlerIOCTL(&a);
+           FileHandlerIOCTL_SetLed(&a);
            printf ("%d\n", a);
+	break;
+	case '7':
+	   printf("Upisi duljinu unit-a u ms:\n");
+	   scanf("%s", unitStr) ;
+  	   sscanf(unitStr, "%d", &a);
+  	   printf ("%d\n", a);
+           FileHandlerIOCTL_SetUnit(&a);
+           printf ("%d\n", a);
+	break;
 	}
+	
     }
 
     return 0;
